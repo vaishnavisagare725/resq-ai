@@ -417,4 +417,15 @@ Every status change is now recorded in a history table, bad data is validated, s
 2. **Do model validators run on save()?** No. They run on `full_clean()`, in model forms, and in DRF serializers. So API input must be validated in the serializer.
 3. **Why a separate history table?** The main row only holds the current state. A history table keeps who changed what and when, which gives accountability and lets me rebuild the timeline.
 4. **What does transaction.atomic do?** It groups several database writes so they either all commit or all roll back, so I never end up with a status changed but no history row.
-5. **Why SET_NULL on updated_by but CASCADE on incident?** History should survive a deleted user, but it makes no sense without the incident it belongs to.
+5. **Why SET_NULL on updated_by but CASCADE on incident?** History should survive a deleted user, but it makes no sense without the incident it belongs to.\
+
+
+
+## Day 5: REST API with DRF
+- Serializer = translator + validator. read_only_fields = the server decides (urgency, status, reporter, department).
+- Nested serializer: workers returned as {id, username, department}.
+- ViewSet + Router = list/create/read and auto URLs.
+- get_queryset: citizen = own, worker = assigned, responder = own department + unrouted (Q object), admin = all. Real security.
+- select_related (ForeignKey JOIN) and prefetch_related (many-to-many, 1 extra query) avoid N+1.
+- Basic auth is temporary; JWT on Day 6.
+- Day 7: Django's ValidationError from assign_* is NOT turned into a 400 by DRF automatically. The API must catch it.

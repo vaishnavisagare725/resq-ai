@@ -1,6 +1,17 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
+
+from accounts.models import User
+
+# The AI will set the category on Day 8; this maps a category to a department.
+CATEGORY_TO_DEPARTMENT = {
+    'fire': 'fire',
+    'medical': 'medical',
+    'flood': 'disaster',
+    'accident': 'police',
+}
 
 
 class Incident(models.Model):
@@ -26,12 +37,21 @@ class Incident(models.Model):
         null=True,
         blank=True,
         related_name='assignments',
+        limit_choices_to={'role': 'responder'},   # NEW: only responders in the dropdown
     )
+    workers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='field_tasks',
+        limit_choices_to={'role': 'worker'},
+    )
+
     title = models.CharField(max_length=200)
     description = models.TextField()
     latitude = models.FloatField(validators=[MinValueValidator(-90), MaxValueValidator(90)])
     longitude = models.FloatField(validators=[MinValueValidator(-180), MaxValueValidator(180)])
     category = models.CharField(max_length=30, default='other')
+    department = models.CharField(max_length=20, choices=User.Department.choices, blank=True)
     urgency = models.CharField(max_length=10, choices=Urgency.choices, default=Urgency.LOW)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -51,6 +71,11 @@ class Incident(models.Model):
     def is_open(self):
         return self.status != self.Status.RESOLVED
 
+    def route_department(self):
+        """Pick the department from the category (used from Day 8)."""
+        if not self.department:
+            self.department = CATEGORY_TO_DEPARTMENT.get(self.category, '')
+
     def change_status(self, new_status, user, note=''):
         """Change the status and write a history row. All or nothing."""
         with transaction.atomic():
@@ -63,6 +88,53 @@ class Incident(models.Model):
                 old_status=old_status,
                 new_status=new_status,
                 note=note,
+            )
+
+    # NEW: a responder takes the case
+    def assign_responder(self, responder, user, note=''):
+        """A responder takes the case. Sets assigned_to, status and a history row."""
+        if responder.role != 'responder':
+            raise ValidationError(f'{responder.username} is not a responder.')
+        if self.department and responder.department != self.department:
+            raise ValidationError(
+                f'{responder.username} is in {responder.department or "no"} department, '
+                f'but this incident needs {self.department}.'
+            )
+        with transaction.atomic():
+            old_status = self.status
+            if not self.department:
+                self.department = responder.department   # the responder claims an unrouted incident
+            self.assigned_to = responder
+            self.status = self.Status.ASSIGNED
+            self.save()
+            IncidentUpdate.objects.create(
+                incident=self,
+                updated_by=user,
+                old_status=old_status,
+                new_status=self.status,
+                note=note or f'Assigned to {responder.username}',
+            )
+
+    def assign_workers(self, workers, user, note=''):
+        """Add workers. They must be workers of this incident's department."""
+        if not self.department:
+            raise ValidationError('Set the incident department before adding workers.')
+        for w in workers:
+            if w.role != 'worker':
+                raise ValidationError(f'{w.username} is not a worker.')
+            if w.department != self.department:
+                raise ValidationError(
+                    f'{w.username} is in {w.department or "no"} department, '
+                    f'but this incident needs {self.department}.'
+                )
+        with transaction.atomic():
+            self.workers.add(*workers)
+            IncidentUpdate.objects.create(
+                incident=self,
+                updated_by=user,
+                old_status=self.status,
+                new_status=self.status,
+                note=note or 'Workers added: ' + ', '.join(w.username for w in workers),
             )
 
 
