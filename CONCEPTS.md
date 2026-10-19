@@ -218,3 +218,125 @@ Django (project + apps) now talks to MySQL through settings, my custom User tabl
 2. **makemigrations vs migrate?** makemigrations writes migration files describing model changes. migrate applies them to the database.
 3. **Why a custom user model at the start?** Django can't swap the user model cleanly after the first migration, and I wanted a `role` field.
 4. **What does middleware do?** It processes every request and response, for security, sessions, authentication, and CORS.
+
+
+
+
+
+
+---
+
+## Day 3: Models and the ORM (Simple Words)
+
+### 1. ORM
+- **Python class = table. Field = column. Object = row.**
+- I write Python, Django writes the SQL.
+- Remember: *Python in, SQL out.*
+
+### 2. Field types
+| Field | Stores |
+|---|---|
+| CharField | short text (title) |
+| TextField | long text (description) |
+| FloatField | decimals (latitude) |
+| DateTimeField | date and time |
+- Remember: *Char is short, Text is long.*
+
+### 3. Choices
+- A field that only accepts a fixed list (low, medium, high, critical).
+- Stops typos and makes a dropdown in the admin.
+- Remember: *choices = a menu, not free typing.*
+
+### 4. default, null, blank
+- **default** = value used if I give none.
+- **null=True** = the database may store empty.
+- **blank=True** = the form may be left empty.
+- Optional ForeignKey needs both.
+- Remember: *null is for the database, blank is for the form.*
+
+### 5. auto_now_add vs auto_now
+- **auto_now_add** = set once, when created.
+- **auto_now** = updated on every save.
+- Remember: *add = birth time, now = last-changed time.*
+
+### 6. ForeignKey
+- A link to a row in another table. **One user, many incidents.**
+- In MySQL it is a number column: `reporter_id`.
+- Remember: *a ForeignKey is a name tag pointing to another table.*
+
+### 7. on_delete
+| Option | What happens when the user is deleted |
+|---|---|
+| CASCADE | their incidents are deleted too |
+| SET_NULL | incidents stay, the link becomes empty |
+| PROTECT | deletion is refused |
+- I use CASCADE for `reporter`, SET_NULL for `assigned_to`.
+- Remember: *CASCADE = chain delete, SET_NULL = keep the data.*
+
+### 8. related_name
+- Lets me walk backwards: `citizen.reports.all()`.
+- Two ForeignKeys to the same table need different related_names.
+- Remember: *forward: incident.reporter. Backward: citizen.reports.*
+
+### 9. AUTH_USER_MODEL
+- In models, point to the user with `settings.AUTH_USER_MODEL`, never import User directly.
+- Remember: *always ask settings who the user is.*
+
+### 10. __str__ and Meta
+- **__str__** = how an object looks in the admin and shell.
+- **Meta ordering = ['-created_at']** = newest first by default.
+- Remember: *__str__ is the name tag, Meta is the sort rule.*
+
+### 11. CRUD in the ORM
+| Action | Code |
+|---|---|
+| Create | `Incident.objects.create(...)` |
+| Read | `.get()`, `.filter()`, `.all()` |
+| Update | change the field, then `.save()` |
+| Delete | `.delete()` |
+- Remember: *nothing is saved until .save().*
+
+### 12. get vs filter
+- **get()** = exactly one row (error if none or many).
+- **filter()** = a list of rows (can be empty).
+- Remember: *get = one, filter = many.*
+
+### 13. Useful filters
+- `filter(urgency='critical')` = matches
+- `exclude(status='resolved')` = everything except
+- `description__icontains='fire'` = contains, ignoring capitals
+- `urgency__in=['high','critical']` = one of these
+- `order_by('-created_at')` = newest first
+- Remember: *double underscore = a special condition.*
+
+### 14. QuerySet is lazy
+- A QuerySet is a recipe. MySQL is only asked when I read the results.
+- `print(qs.query)` shows the real SQL.
+- Remember: *recipe first, cooking later.*
+
+### 15. N+1 problem
+- 1 query for the list + 1 extra query for every row's related object.
+- 100 incidents = 101 queries. Slow.
+- Fix: **select_related('reporter')** joins the tables in one query.
+- **prefetch_related** is for reverse and many-to-many links.
+- My test: bad = 4 queries, good = 1 query.
+- Remember: *N+1 = asking one by one. select_related = asking all at once.*
+
+### 16. Aggregation
+- `values('urgency').annotate(total=Count('id'))` = GROUP BY in Python.
+- The dashboard will use it.
+- Remember: *values groups, annotate counts.*
+
+### 17. create_user
+- `create_user()` hashes the password. `create()` would store it as plain text.
+- Remember: *always create_user for passwords.*
+
+## One-line summary of Day 3
+I turned a Python class into the `incidents_incident` table, linked it to users with ForeignKeys, and read and changed the data with Python instead of SQL.
+
+## Interview answers to practise
+1. **What is an ORM?** It maps classes to tables and objects to rows, so I write Python and the framework generates SQL. It is faster to build with and safer against SQL injection, but complex queries can be harder to optimise.
+2. **filter vs get?** `get` returns exactly one object and raises an error if there are none or several. `filter` returns a QuerySet that can hold zero or many.
+3. **What is the N+1 problem?** One query for a list plus one extra query per row to load a related object. I fix it with `select_related` for ForeignKeys or `prefetch_related` for reverse and many-to-many relations.
+4. **What does on_delete do?** It decides what happens to child rows when the parent is deleted: CASCADE deletes them, SET_NULL keeps them with an empty link, PROTECT blocks the delete.
+5. **What does lazy mean?** A QuerySet does not hit the database until I iterate, slice, or count it, so I can chain filters cheaply.
