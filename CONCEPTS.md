@@ -340,3 +340,81 @@ I turned a Python class into the `incidents_incident` table, linked it to users 
 3. **What is the N+1 problem?** One query for a list plus one extra query per row to load a related object. I fix it with `select_related` for ForeignKeys or `prefetch_related` for reverse and many-to-many relations.
 4. **What does on_delete do?** It decides what happens to child rows when the parent is deleted: CASCADE deletes them, SET_NULL keeps them with an empty link, PROTECT blocks the delete.
 5. **What does lazy mean?** A QuerySet does not hit the database until I iterate, slice, or count it, so I can chain filters cheaply.
+
+
+
+
+
+---
+
+## Day 4: History, Validation, Indexes (Simple Words)
+
+### 1. History (audit) table
+- The main table stores the **present**. The history table stores the **diary**.
+- My `IncidentUpdate` table records: which incident, who changed it, old status, new status, and when.
+- Emergency systems need this for accountability.
+- Remember: *main table = now, history table = diary.*
+
+### 2. Why SET_NULL on updated_by
+- If a responder's account is deleted, the history must stay. Only the "who" becomes empty.
+- The incident link uses CASCADE, because history without its incident is useless.
+- Remember: *a diary outlives the writer's account.*
+
+### 3. Latitude and longitude
+- **Latitude** = north-south, range **-90 to 90**.
+- **Longitude** = east-west, range **-180 to 180**.
+- Pune is about 18.5, 73.8. `latitude=200` is impossible.
+- Remember: *latitude is up-down (90), longitude is left-right (180).*
+
+### 4. Validators
+- Rules on a field that reject bad values (`MinValueValidator`, `MaxValueValidator`).
+- They run in `full_clean()`, admin forms, and DRF serializers.
+- They do **not** run on `save()` or `create()`.
+- That is why the API serializer must validate input on Day 5.
+- Remember: *validators guard the front door, not the back door.*
+
+### 5. Database index
+- Like the index at the back of a book.
+- Without it, MySQL reads every row. With it, MySQL jumps to the matching rows.
+- **Pro:** fast filtering and sorting. **Con:** extra space and slightly slower writes.
+- Index columns I filter or sort by: `status`, `urgency`, `created_at`.
+- Remember: *index = fast reading, slower writing.*
+
+### 6. Model method and @property
+- Put small logic on the model, next to the data.
+- `@property is_open` is read like a field: `incident.is_open` (no brackets).
+- Remember: *logic lives next to its data.*
+
+### 7. transaction.atomic
+- Several database writes that **all succeed or all fail**.
+- In `change_status`, the status update and the history row must happen together.
+- Remember: *atomic = all or nothing.*
+
+### 8. Admin inline
+- Shows related rows (the history) inside the parent's page.
+- I made it read-only so nobody edits the history by hand.
+- Remember: *one screen tells the whole story.*
+
+### 9. list_select_related
+- The admin's version of `select_related`.
+- Stops the admin list from running N+1 queries.
+- Remember: *same N+1 cure, inside the admin.*
+
+### 10. Admin action
+- A bulk operation from the list page (my "Mark selected as resolved").
+- It calls `change_status`, so every resolve is written to the history.
+- Remember: *one click, many rows, still recorded.*
+
+### 11. Reusing choices
+- `IncidentUpdate` uses `Incident.Status.choices`, so both tables share one list of statuses.
+- Remember: *define once, reuse everywhere.*
+
+## One-line summary of Day 4
+Every status change is now recorded in a history table, bad data is validated, searches are indexed, and the admin shows each incident's story.
+
+## Interview answers to practise
+1. **What is a database index?** A data structure that lets the database find rows without scanning the whole table. It speeds up filters and sorting, but costs extra space and makes inserts and updates slightly slower.
+2. **Do model validators run on save()?** No. They run on `full_clean()`, in model forms, and in DRF serializers. So API input must be validated in the serializer.
+3. **Why a separate history table?** The main row only holds the current state. A history table keeps who changed what and when, which gives accountability and lets me rebuild the timeline.
+4. **What does transaction.atomic do?** It groups several database writes so they either all commit or all roll back, so I never end up with a status changed but no history row.
+5. **Why SET_NULL on updated_by but CASCADE on incident?** History should survive a deleted user, but it makes no sense without the incident it belongs to.
