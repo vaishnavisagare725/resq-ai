@@ -429,3 +429,98 @@ Every status change is now recorded in a history table, bad data is validated, s
 - select_related (ForeignKey JOIN) and prefetch_related (many-to-many, 1 extra query) avoid N+1.
 - Basic auth is temporary; JWT on Day 6.
 - Day 7: Django's ValidationError from assign_* is NOT turned into a 400 by DRF automatically. The API must catch it.
+
+
+
+
+
+## Day 6: JWT Authentication (Simple Words)
+
+### 1. Authentication vs authorization
+- **Authentication** = who are you? **Authorization** = what may you do?
+- Remember: *login first, permission second.*
+
+### 2. Stateless and tokens
+- HTTP forgets me after every request, so each request carries proof.
+- The proof is a **token**.
+- Remember: *the token is my wristband.*
+
+### 3. Session vs token
+| | Session | Token (JWT) |
+|---|---|---|
+| Login remembered on | the server | the client |
+| Sent as | cookie | `Authorization: Bearer <token>` |
+| Best for | server-rendered sites | React, mobile apps, APIs |
+- Remember: *sessions for websites, tokens for APIs.*
+
+### 4. JWT = header.payload.signature
+- **Payload** holds `user_id`, `role`, `exp` (expiry).
+- **Signature** is made with `SECRET_KEY`. Changing the payload breaks it, so it cannot be forged.
+- **Signed, not encrypted**: anyone can read the payload. No secrets inside.
+- Remember: *a JWT is a signed ID card: unforgeable, but readable.*
+
+### 5. Access vs refresh token
+- **Access** = short (30 min), used on every request.
+- **Refresh** = longer (1 day), used only to get a new access token.
+- If an access token leaks, it dies soon.
+- Remember: *access opens doors, refresh gets a new key.*
+
+### 6. Bearer header
+- `Authorization: Bearer <access token>` (a space after Bearer).
+- Remember: *Bearer + space + token.*
+
+### 7. Never trust the role inside the token
+- The token carries `role` only as a convenience for React.
+- The backend loads the user from the **database**, so `request.user.role` is always current.
+- Remember: *the database is the truth, the token is a note.*
+
+### 8. Safe registration
+- The register serializer has **no role or department field**.
+- Extra keys in the request are ignored. New accounts are always **citizens**.
+- Responders and workers are created by an admin.
+- Remember: *nobody registers themselves as admin.*
+
+### 9. Passwords
+- `write_only` = accepted, never returned.
+- `create_user` hashes it. The database shows `pbkdf2_sha256$...`.
+- `validate_password` applies Django's rules (not too short, not too common, not all numbers).
+- Remember: *hash it, never store it plain.*
+
+### 10. /api/auth/me/
+- Tells React who is logged in (username, role, department).
+- It never takes an id from the URL. It uses `request.user`.
+- Remember: *me = the person holding this token.*
+
+### 11. 401 vs 403
+- **401** = no valid token ("who are you?").
+- **403** = valid token, not allowed.
+- Remember: *401 = no ticket, 403 = wrong ticket.*
+
+### 12. A JWT cannot be cancelled early
+- Once issued, it is valid until it expires.
+- That is why access tokens are short-lived. A blacklist can revoke refresh tokens.
+- Remember: *short life = small damage.*
+
+### 13. SECRET_KEY
+- It signs every token. A guessable key means forged tokens.
+- Use a long random key, keep it in `.env`, and never commit it.
+- Remember: *the secret key is the stamp that signs tokens.*
+
+### 14. ModelSerializer copies model rules
+- Unique username gave a 400 `A user with that username already exists` with no code from me.
+- Remember: *the model's rules travel to the serializer.*
+
+## One-line summaries
+- **Day 5:** the API shows each role only its own incidents, departments route the work, and one rule per action keeps the data clean.
+- **Day 6:** users register safely, log in for tokens, and send `Bearer` tokens so the server knows who they are on every request.
+
+## Interview answers to practise
+1. **Why override get_queryset?** It decides which rows each user may see. Without it, any logged-in citizen could read everyone's reports.
+2. **select_related vs prefetch_related?** `select_related` uses a JOIN for ForeignKeys. `prefetch_related` runs one extra query for many-to-many or reverse relations. Both avoid N+1.
+3. **Why 404 for a hidden incident?** A 403 would confirm it exists. The queryset hides it, so the API says not found.
+4. **Why one method for assigning workers?** The admin, the shell, and the API all need the same rule, and `workers.add()` or `save()` would skip it. The method checks first, then writes inside a transaction.
+5. **Session vs token authentication?** Sessions keep the login on the server and use cookies, which suits server-rendered sites. Tokens are sent in a header and suit React and mobile apps.
+6. **What is a JWT?** Three parts: header, payload, and a signature made with the secret key. It is signed, not encrypted, so anyone can read it, but nobody can change it without the key.
+7. **Why access and refresh tokens?** The access token is short-lived, so a leak causes little harm. The refresh token is used only to get new access tokens.
+8. **Why must register ignore role?** Otherwise anyone could register as an admin. The serializer doesn't include role, so new accounts are always citizens.
+9. **401 vs 403?** 401 means not authenticated. 403 means authenticated but not allowed.
