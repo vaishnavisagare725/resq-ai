@@ -53,3 +53,16 @@ class CanAddImages(BasePermission):
             or obj.assigned_to_id == u.id
             or obj.workers.filter(pk=u.pk).exists()
         )
+
+
+class CanTriage(BasePermission):
+    """Responders and admins. An unassigned incident can be triaged by any responder who sees it;
+    once taken, only the owning responder or an admin."""
+
+    def has_permission(self, request, view):
+        u = request.user
+        return u.is_authenticated and u.role in ('responder', 'admin')
+
+    def has_object_permission(self, request, view, obj):
+        u = request.user
+        return u.role == 'admin' or obj.assigned_to_id in (None, u.id)

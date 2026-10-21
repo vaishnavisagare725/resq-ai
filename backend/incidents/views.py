@@ -5,9 +5,11 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Incident
+from .ai_service import predict
+from .models import CATEGORY_TO_DEPARTMENT, Incident
 from .permissions import (
     CanAddImages,
+    CanTriage,
     IsAssignedResponderOrAdmin,
     IsOnIncidentOrAdmin,
     IsResponder,
@@ -18,6 +20,7 @@ from .serializers import (
     IncidentSerializer,
     IncidentUpdateSerializer,
     NoteSerializer,
+    TriageSerializer,
     WorkerIdsSerializer,
 )
 
@@ -45,6 +48,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
             return [IsOnIncidentOrAdmin()]
         if self.action == 'images':
             return [CanAddImages()]
+        if self.action == 'triage':
+            return [CanTriage()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -70,6 +75,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
             value = params.get(field)
             if value:
                 qs = qs.filter(**{field: value})
+        if params.get('needs_review') == 'true':
+            qs = qs.filter(needs_review=True)
         text = params.get('q')
         if text:
             qs = qs.filter(Q(title__icontains=text) | Q(description__icontains=text))
@@ -78,7 +85,17 @@ class IncidentViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(reporter=self.request.user)
+        """The AI decides urgency, category and department. The client cannot."""
+        data = serializer.validated_data
+        result = predict(data['title'], data['description'])
+        serializer.save(
+            reporter=self.request.user,
+            urgency=result['urgency'],
+            category=result['category'],
+            department=CATEGORY_TO_DEPARTMENT.get(result['category'], ''),
+            ai_reason=result['reason'],
+            needs_review=result['needs_review'],
+        )
 
     def _fresh(self, incident):
         """Reload the incident so the response shows the new workers, images and status."""
@@ -135,6 +152,15 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.change_status(
             Incident.Status.RESOLVED, request.user, s.validated_data.get('note', '')
         )
+        return Response(self._fresh(incident))
+
+    # POST /api/incidents/<id>/triage/   {"urgency": "high", "category": "medical", "note": "..."}
+    @action(detail=True, methods=['post'])
+    def triage(self, request, pk=None):
+        incident = self.get_object()
+        s = TriageSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        incident.triage(request.user, **s.validated_data)
         return Response(self._fresh(incident))
 
     # GET /api/incidents/<id>/updates/

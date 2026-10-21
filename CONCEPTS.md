@@ -524,3 +524,204 @@ Every status change is now recorded in a history table, bad data is validated, s
 7. **Why access and refresh tokens?** The access token is short-lived, so a leak causes little harm. The refresh token is used only to get new access tokens.
 8. **Why must register ignore role?** Otherwise anyone could register as an admin. The serializer doesn't include role, so new accounts are always citizens.
 9. **401 vs 403?** 401 means not authenticated. 403 means authenticated but not allowed.
+
+
+
+
+---
+
+## Day 7: Permissions, Actions, Images (Simple Words)
+
+### 1. Two levels of permission
+- **has_permission** = may this KIND of user use this endpoint? (a citizen can't take a case)
+- **has_object_permission** = is it MY incident? (only the assigned responder manages workers)
+- Remember: *has_permission is the door, has_object_permission is the room.*
+
+### 2. The order DRF checks things
+1. Token valid? No = **401**
+2. Right role (`has_permission`)? No = **403**
+3. Can I even see this incident (`get_queryset`)? No = **404**
+4. Is it mine (`has_object_permission`)? No = **403**
+- Remember: *401, 403, 404, 403: who, what kind, visible, mine.*
+
+### 3. Custom actions (@action)
+- One endpoint per business step: `take`, `add-workers`, `remove-workers`, `resolve`, `images`, `updates`.
+- Better than one generic PATCH, because each step has its own rules and a PATCH lets clients set any field.
+- Remember: *one button, one endpoint, one rule.*
+
+### 4. Input serializers
+- Validate request bodies that are not models: `{"worker_ids": [4]}`.
+- Empty lists and non-numbers are rejected with a 400.
+- Remember: *validate every request body.*
+
+### 5. Reuse the model methods
+- The API calls `assign_responder`, `assign_workers`, `change_status`, the same ones the admin and shell use.
+- One rule and one history diary for everyone.
+- Remember: *one rule, one door.*
+
+### 6. Exception handler
+- Django's `ValidationError` would be a 500 in DRF. One handler turns it into a clean 400.
+- Remember: *handle the error once, in one place.*
+
+### 7. _fresh()
+- Reload the incident after a change so the response shows the new workers, images, and status.
+- Remember: *reload before you reply.*
+
+### 8. Locked when resolved
+- `_ensure_open()` blocks taking, adding or removing workers, and photos after an incident is resolved.
+- Remember: *resolved means finished.*
+
+### 9. Sorting by urgency
+- Text sorting gives the wrong order (alphabetical). `annotate` + `Case/When` gives each urgency a rank.
+- `?sort=urgency` puts critical first.
+- Remember: *rank it, don't alphabetise it.*
+
+### 10. Filters
+- `?status=`, `?urgency=`, `?department=`, `?q=fire` (search text).
+- Remember: *the URL carries the filters.*
+
+### 11. CORS
+- The browser blocks React (port 5173) from calling Django (port 8000) unless Django allows it.
+- Remember: *different port = different origin = needs permission.*
+
+### 12. Images: files are not in MySQL
+- The database stores the **path**. The file lives in `media/`.
+- `MEDIA_ROOT` = where files are saved. `MEDIA_URL` = the URL prefix.
+- Remember: *database holds the address, the folder holds the picture.*
+
+### 13. ImageField and Pillow
+- `ImageField` uses Pillow to check the upload is really an image.
+- A text file renamed `.jpg` is rejected.
+- Remember: *check the content, not the name.*
+
+### 14. multipart/form-data
+- Files can't go in JSON. The request is multipart, and the form field is named `image`.
+- Remember: *JSON for data, multipart for files.*
+
+### 15. Safe uploads
+- Random `uuid` file names stop overwrites and guessable URLs. Never use the client's file name.
+- Limits: 5 MB each, 3 per incident. The server sets `incident` and `uploaded_by`.
+- Remember: *never trust the client's file or its name.*
+
+### 16. Limits to mention in an interview
+- Image URLs are public by link (random names, but not private).
+- Files stay on disk when a row is deleted.
+- Hosting disks are temporary, so production needs cloud storage.
+- Photos can carry GPS data, which is a privacy concern.
+- Remember: *it works, and I know where it is weak.*
+
+## One-line summary of Day 7
+The API now runs the whole emergency workflow (take, add workers, photos, resolve) with the right person allowed at each step, and every change is recorded.
+
+## Interview answers to practise
+1. **has_permission vs has_object_permission?** The first decides whether this kind of user may use the endpoint at all. The second decides whether they may act on this specific object.
+2. **Why 404 and not 403 for a hidden incident?** `get_object` searches inside `get_queryset`, so a hidden incident is simply not found. A 403 would confirm it exists.
+3. **Why custom @actions and not PATCH?** Each workflow step has its own rules, history entry, and allowed users. A generic PATCH lets the client set any field.
+4. **How do you turn a Django ValidationError into a 400?** A custom exception handler registered in `REST_FRAMEWORK['EXCEPTION_HANDLER']`.
+5. **Where is an uploaded image stored?** In the `media` folder on disk. The database stores only the file path.
+6. **How do you stop a fake image?** `ImageField` verifies the content with Pillow, and the serializer checks the size.
+
+
+
+
+
+
+
+---
+
+## Day 8: AI Triage (Simple Words)
+
+### 1. Service layer
+- The AI logic lives in its own file, `ai_service.py`. The view only calls `predict()`.
+- I can replace the AI later without touching the API.
+- Remember: *views ask, the service answers.*
+
+### 2. Pure function
+- `predict(title, description)` takes text and returns a dictionary. It imports nothing from Django and touches no database.
+- Easy to test, easy to replace.
+- Remember: *same input, same output, no side effects.*
+
+### 3. Rule-based AI vs machine learning
+| | Rule-based (mine) | Machine learning |
+|---|---|---|
+| Decides by | keyword rules I wrote | patterns learned from labelled examples |
+| Explains itself | yes, it lists the matched words | hard |
+| Needs data | no | yes, hundreds of labelled reports |
+| New wording | poor | better |
+- I started with rules because I had no data and I want explainable decisions.
+- Remember: *start with rules I can explain, upgrade when I have data.*
+
+### 4. Weighted scoring
+- Every category keyword has a weight (`collided` = 3, `injured` = 1). The highest total wins. A tie uses a priority order.
+- "Two bikes collided, one injured" is an accident (3), not medical (1).
+- Remember: *strong words count more.*
+
+### 5. Whole-word matching
+- The regex `\b` marks a word boundary, so `fire` does not match `fireplace` and `burn` does not match `burning`.
+- Remember: *match words, not letters.*
+
+### 6. Negation
+- A phrase is skipped when `no`, `not`, `without`, `never`, `false`, or `no one is` comes right before it. ("No fire, just toast" is not a fire.)
+- It is deliberately narrow: "not sure, but there is smoke" still counts.
+- Remember: *a missed emergency is worse than a false alarm.*
+
+### 7. Raisers
+- A child, an elderly person, or "many people" raises a medium or high report by one level.
+- Remember: *vulnerable people move the urgency up.*
+
+### 8. Explainability
+- The AI saves why in `ai_reason`: "urgency critical from: fire, trapped".
+- Remember: *the AI shows its work.*
+
+### 9. needs_review
+- True when the AI found nothing useful (category `other`). Those reports have no department, so every responder sees them.
+- Remember: *when the AI is unsure, a human decides.*
+
+### 10. The server decides, the client doesn't
+- `perform_create` sets urgency, category, department, `ai_reason`, and `needs_review` from the AI.
+- A citizen who sends `"urgency": "critical"` is ignored, because those serializer fields are read-only.
+- Remember: *the client can't pick its own priority.*
+
+### 11. Human in the loop: /triage/
+- The AI suggests. A responder corrects urgency or category. The department is re-routed and the change goes into the history diary.
+- **CanTriage:** responders and admins only. An untaken incident can be triaged by any responder who sees it. A taken one only by its owner or an admin.
+- A taken incident's department can't change.
+- Remember: *the AI suggests, the human decides.*
+
+### 12. Check first, then write
+- `triage()` validates everything, then writes inside `transaction.atomic()`. A rejected request changes nothing.
+- Remember: *a failed attempt leaves no mess.*
+
+### 13. False negative vs false positive
+- False negative: a real emergency judged low. Dangerous.
+- False positive: a harmless report judged high. Costs time.
+- The rules lean towards raising urgency.
+- Remember: *when in doubt, raise it or send it to a human.*
+
+### 14. Unit tests
+- A table of 16 example reports with the expected result, run with `python manage.py test incidents`.
+- `SimpleTestCase` needs no database. `subTest` names the failing example.
+- Remember: *every rule change must keep the examples green.*
+
+### 15. Management command
+- `python manage.py ai_backfill` re-checks old data. It never overrides human choices.
+- Remember: *a command is a script that knows my project.*
+
+### 16. Limits (be honest in an interview)
+- English only. A Marathi report goes to the review queue.
+- Keywords miss new wording and spelling mistakes.
+- One category per report (a crash with an unconscious victim needs two teams).
+- No accuracy figure yet, because there is no real labelled data. A real system measures precision and recall.
+- Remember: *it works, and I know exactly where it is weak.*
+
+## One-line summary of Day 8
+New reports are triaged by an explainable rule engine that sets urgency, category, and department, and responders can correct it, with every correction recorded.
+
+## Interview answers to practise
+1. **Why a service layer?** The AI logic is isolated, testable, and replaceable, and the API doesn't change when the AI does.
+2. **Why rules before ML?** I had no labelled data, rules are explainable and testable, and the same function interface lets me swap in a trained model later.
+3. **How does it handle "no fire"?** It skips a phrase preceded by a negation word. The rule is narrow on purpose, so a real emergency isn't missed.
+4. **False negatives vs false positives?** In an emergency system a missed emergency is worse, so the rules lean towards raising urgency and sending unclear reports to humans.
+5. **Why can't a citizen set their own urgency?** The AI fields are read-only on the serializer, and `perform_create` sets them on the server.
+6. **Why a triage endpoint?** AI should assist, not decide. A responder can correct it, and the correction is recorded in the history.
+7. **How would you evaluate the AI?** Collect labelled reports, then measure precision and recall per urgency level, with extra weight on recall for critical.

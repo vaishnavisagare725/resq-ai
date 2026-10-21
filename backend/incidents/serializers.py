@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Incident, IncidentImage, IncidentUpdate
+from .models import VALID_CATEGORIES, Incident, IncidentImage, IncidentUpdate
 
 User = get_user_model()
 
@@ -44,12 +44,14 @@ class IncidentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'latitude', 'longitude',
             'category', 'department', 'urgency', 'status',
+            'ai_reason', 'needs_review',
             'reporter', 'reporter_name',
             'assigned_to', 'assigned_to_name', 'assigned_to_department',
             'workers', 'images', 'is_open', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'category', 'department', 'urgency', 'status',
+            'ai_reason', 'needs_review',
             'reporter', 'assigned_to', 'created_at', 'updated_at',
         ]
 
@@ -67,6 +69,17 @@ class WorkerIdsSerializer(serializers.Serializer):
 
 class NoteSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
+class TriageSerializer(serializers.Serializer):
+    urgency = serializers.ChoiceField(choices=Incident.Urgency.choices, required=False)
+    category = serializers.ChoiceField(choices=VALID_CATEGORIES, required=False)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=300)
+
+    def validate(self, attrs):
+        if 'urgency' not in attrs and 'category' not in attrs:
+            raise serializers.ValidationError('Send urgency, category, or both.')
+        return attrs
 
 
 class IncidentUpdateSerializer(serializers.ModelSerializer):

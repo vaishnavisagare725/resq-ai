@@ -8,13 +8,14 @@ from django.db import models, transaction
 
 from accounts.models import User
 
-# The AI will set the category on Day 8; this maps a category to a department.
+# Maps the AI's category to the department that handles it.
 CATEGORY_TO_DEPARTMENT = {
     'fire': 'fire',
     'medical': 'medical',
     'flood': 'disaster',
     'accident': 'police',
 }
+VALID_CATEGORIES = ['fire', 'medical', 'flood', 'accident', 'other']
 
 
 class Incident(models.Model):
@@ -57,6 +58,8 @@ class Incident(models.Model):
     department = models.CharField(max_length=20, choices=User.Department.choices, blank=True)
     urgency = models.CharField(max_length=10, choices=Urgency.choices, default=Urgency.LOW)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    ai_reason = models.CharField(max_length=300, blank=True)
+    needs_review = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -75,13 +78,53 @@ class Incident(models.Model):
         return self.status != self.Status.RESOLVED
 
     def route_department(self):
-        """Pick the department from the category (used from Day 8)."""
+        """Pick the department from the category."""
         if not self.department:
             self.department = CATEGORY_TO_DEPARTMENT.get(self.category, '')
 
     def _ensure_open(self):
         if self.status == self.Status.RESOLVED:
             raise ValidationError('This incident is already resolved.')
+
+    def triage(self, user, urgency=None, category=None, note=''):
+        """A responder corrects the AI's urgency and/or category. Re-routes the department."""
+        self._ensure_open()
+        if urgency and urgency not in self.Urgency.values:
+            raise ValidationError(f'Unknown urgency: {urgency}.')
+        if category and category not in VALID_CATEGORIES:
+            raise ValidationError(f'Unknown category: {category}.')
+
+        changes = []
+        new_urgency, new_category, new_department = self.urgency, self.category, self.department
+
+        if urgency and urgency != self.urgency:
+            changes.append(f'urgency {self.urgency} -> {urgency}')
+            new_urgency = urgency
+        if category and category != self.category:
+            new_department = CATEGORY_TO_DEPARTMENT.get(category, '')
+            if self.assigned_to_id and new_department != self.department:
+                raise ValidationError(
+                    'This incident is already taken, so its department cannot change.'
+                )
+            changes.append(f'category {self.category} -> {category}')
+            new_category = category
+        if not changes:
+            raise ValidationError('Nothing to change.')
+
+        with transaction.atomic():
+            self.urgency = new_urgency
+            self.category = new_category
+            self.department = new_department
+            self.needs_review = False
+            self.save()
+            text = f'Triage by {user.username}: ' + ', '.join(changes)
+            IncidentUpdate.objects.create(
+                incident=self,
+                updated_by=user,
+                old_status=self.status,
+                new_status=self.status,
+                note=text + (f'. {note}' if note else ''),
+            )
 
     def change_status(self, new_status, user, note=''):
         """Change the status and write a history row. All or nothing."""
