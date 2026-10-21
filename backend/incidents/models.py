@@ -1,3 +1,6 @@
+import os
+import uuid
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -37,7 +40,7 @@ class Incident(models.Model):
         null=True,
         blank=True,
         related_name='assignments',
-        limit_choices_to={'role': 'responder'},   # NEW: only responders in the dropdown
+        limit_choices_to={'role': 'responder'},
     )
     workers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
@@ -76,6 +79,10 @@ class Incident(models.Model):
         if not self.department:
             self.department = CATEGORY_TO_DEPARTMENT.get(self.category, '')
 
+    def _ensure_open(self):
+        if self.status == self.Status.RESOLVED:
+            raise ValidationError('This incident is already resolved.')
+
     def change_status(self, new_status, user, note=''):
         """Change the status and write a history row. All or nothing."""
         with transaction.atomic():
@@ -90,9 +97,9 @@ class Incident(models.Model):
                 note=note,
             )
 
-    # NEW: a responder takes the case
     def assign_responder(self, responder, user, note=''):
         """A responder takes the case. Sets assigned_to, status and a history row."""
+        self._ensure_open()
         if responder.role != 'responder':
             raise ValidationError(f'{responder.username} is not a responder.')
         if self.department and responder.department != self.department:
@@ -117,6 +124,7 @@ class Incident(models.Model):
 
     def assign_workers(self, workers, user, note=''):
         """Add workers. They must be workers of this incident's department."""
+        self._ensure_open()
         if not self.department:
             raise ValidationError('Set the incident department before adding workers.')
         for w in workers:
@@ -135,6 +143,19 @@ class Incident(models.Model):
                 old_status=self.status,
                 new_status=self.status,
                 note=note or 'Workers added: ' + ', '.join(w.username for w in workers),
+            )
+
+    def remove_workers(self, workers, user, note=''):
+        """Remove workers and write a history row."""
+        self._ensure_open()
+        with transaction.atomic():
+            self.workers.remove(*workers)
+            IncidentUpdate.objects.create(
+                incident=self,
+                updated_by=user,
+                old_status=self.status,
+                new_status=self.status,
+                note=note or 'Workers removed: ' + ', '.join(w.username for w in workers),
             )
 
 
@@ -156,3 +177,27 @@ class IncidentUpdate(models.Model):
 
     def __str__(self):
         return f'{self.incident_id}: {self.old_status} -> {self.new_status}'
+
+
+def incident_image_path(instance, filename):
+    """Random file name grouped by incident: incidents/5/3f9a....jpg"""
+    ext = os.path.splitext(filename)[1].lower()
+    return f'incidents/{instance.incident_id}/{uuid.uuid4().hex}{ext}'
+
+
+class IncidentImage(models.Model):
+    incident = models.ForeignKey(Incident, on_delete=models.CASCADE, related_name='images')
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='uploaded_images',
+    )
+    image = models.ImageField(upload_to=incident_image_path)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'Image {self.id} for incident {self.incident_id}'
