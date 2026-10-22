@@ -725,3 +725,91 @@ New reports are triaged by an explainable rule engine that sets urgency, categor
 5. **Why can't a citizen set their own urgency?** The AI fields are read-only on the serializer, and `perform_create` sets them on the server.
 6. **Why a triage endpoint?** AI should assist, not decide. A responder can correct it, and the correction is recorded in the history.
 7. **How would you evaluate the AI?** Collect labelled reports, then measure precision and recall per urgency level, with extra weight on recall for critical.
+
+
+
+
+
+---
+
+## Day 9: React Frontend (Simple Words)
+
+### 1. SPA and Vite
+- A single-page app loads once, then React redraws parts and calls the API. No full reloads.
+- **Vite** = the dev server (instant refresh) and the bundler for production.
+- Remember: *load once, then talk to the API.*
+
+### 2. npm, package.json, node_modules
+- `package.json` = the shopping list of JS packages. `node_modules/` = the downloaded packages (huge, in .gitignore).
+- Anyone recreates it with `npm install`.
+- Remember: *commit package.json, never node_modules.*
+
+### 3. Component, JSX, props, state
+- A component is a function that returns what to draw. JSX is HTML-looking code inside JavaScript.
+- **Props** come in (read-only). **State** (`useState`) lives inside, and changing it redraws.
+- Remember: *props come in, state lives inside.*
+
+### 4. useEffect
+- Runs after a render, e.g. fetch data when the page opens. The dependency array says when to re-run.
+- Cleanup + a `cancelled` flag stop a slow answer from updating a page I already left.
+- StrictMode runs effects twice in development, so I may see two requests. Production does not.
+- Remember: *effects talk to the outside world.*
+
+### 5. Controlled form
+- Each input's value lives in state, and `onChange` updates it.
+- Remember: *React always knows what is typed.*
+
+### 6. React Router
+- `<Routes>/<Route>` map URLs to pages. `<NavLink>` navigates. `<Navigate>` redirects. `useLocation` says where I am.
+- Remember: *URL in, component out.*
+
+### 7. Axios instance and interceptors
+- One shared client with the base URL.
+- **Request interceptor:** adds `Authorization: Bearer <token>` to every call.
+- **Response interceptor:** on 401 it asks `/auth/refresh/` for a new access token, retries the original call once, and logs out if the refresh fails.
+- A shared `refreshing` promise makes several simultaneous 401s trigger only one refresh.
+- Remember: *the interceptor renews the token so the user never notices.*
+
+### 8. Context API
+- `AuthProvider` holds the user. `useAuth()` reads it anywhere, with no prop drilling.
+- Remember: *provider holds it, hook reads it.*
+
+### 9. Loading state
+- With a stored token I must ask `/auth/me/` who it is. Until then show "Loading" and do not redirect.
+- Remember: *don't redirect before I know who the user is.*
+
+### 10. Protected route
+- Redirects visitors who aren't logged in or have the wrong role.
+- It is a **convenience, not security**. The real rules live in Django permissions.
+- Remember: *React hides buttons, Django enforces rules.*
+
+### 11. Where to store the JWT
+- localStorage: simple, but injected JavaScript (XSS) could read it.
+- In memory: safer, lost on refresh.
+- httpOnly cookie: JavaScript can't read it, but needs CSRF protection.
+- My MVP uses localStorage with a 30-minute access token.
+- Remember: *short-lived access tokens limit the damage.*
+
+### 12. Vite environment variables
+- Names start with `VITE_`. They are baked into the public bundle, so never put secrets there.
+- Remember: *VITE_ means public.*
+
+### 13. CORS (again)
+- The browser enforces it, and the server permits it. Django allows `http://localhost:5173`.
+- Remember: *the browser asks, the server says yes.*
+
+### 14. Debugging with DevTools
+- Network tab: request headers, status, response. Application tab: Local Storage.
+- Test the renewal by setting `access` to `broken` and refreshing.
+- Remember: *the Network tab shows the truth.*
+
+## One-line summary of Day 9
+A React app now registers and logs users in, sends the JWT on every call, renews it automatically, and shows each role its own menu and its own incidents from the Django API.
+
+## Interview answers to practise
+1. **Props vs state?** Props are inputs passed from a parent and are read-only. State is data a component owns, and changing it re-renders.
+2. **What does the dependency array in useEffect do?** It lists the values the effect depends on. The effect re-runs only when one changes, and an empty array means run once after the first render.
+3. **How does your token refresh work?** A response interceptor catches a 401, calls the refresh endpoint once, stores the new access token, retries the original request, and logs out if the refresh fails.
+4. **Is a ProtectedRoute secure?** No. It only improves the experience. Anyone can change browser code, so the API enforces permissions.
+5. **Where do you store a JWT and what are the risks?** localStorage, which XSS could read. The alternatives are memory or an httpOnly cookie with CSRF protection. I limit the damage with a 30-minute access token.
+6. **What is CORS?** A browser rule that blocks a page from calling another origin unless that server allows it. Django allows the React origin.
