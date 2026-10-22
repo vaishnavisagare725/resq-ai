@@ -2,9 +2,12 @@ import { Route, Routes } from 'react-router'
 import Navbar from './components/Navbar'
 import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
+import IncidentDetail from './pages/IncidentDetail'
 import Login from './pages/Login'
+import MyReports from './pages/MyReports'
 import Placeholder from './pages/Placeholder'
 import Register from './pages/Register'
+import ReportIncident from './pages/ReportIncident'
 
 export default function App() {
   return (
@@ -20,7 +23,7 @@ export default function App() {
             path="/report"
             element={
               <ProtectedRoute roles={['citizen']}>
-                <Placeholder title="Report an incident" day="Day 10" />
+                <ReportIncident />
               </ProtectedRoute>
             }
           />
@@ -28,7 +31,15 @@ export default function App() {
             path="/my-reports"
             element={
               <ProtectedRoute roles={['citizen']}>
-                <Placeholder title="My reports" day="Day 10" />
+                <MyReports />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/incidents/:id"
+            element={
+              <ProtectedRoute>
+                <IncidentDetail />
               </ProtectedRoute>
             }
           />

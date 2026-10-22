@@ -816,3 +816,87 @@ A React app now registers and logs users in, sends the JWT on every call, renews
 
 - "LF will be replaced by CRLF" is a Windows line-ending notice, not an error. Check git status for the real file list.
 - Vite's package.json and package-lock.json are committed. node_modules is not, because anyone recreates it with npm install.
+
+
+
+
+
+---
+
+## Day 10: Citizen Pages (Simple Words)
+
+### 1. Geolocation API
+- `navigator.geolocation.getCurrentPosition(success, failure, options)` asks the browser for my position, after the user gives permission.
+- Works only on `https://` or `localhost`. Always give a fallback: typing the coordinates.
+- Error codes: 1 denied, 2 unavailable, 3 timeout.
+- Remember: *ask permission, and always have a fallback.*
+
+### 2. FormData vs JSON
+- JSON carries text. Files need `multipart/form-data`, which `FormData` builds.
+- Don't set Content-Type myself, because the browser adds the boundary.
+- Remember: *JSON for data, FormData for files.*
+
+### 3. Two requests: create, then upload
+- First `POST /incidents/` (JSON). Then one `POST /incidents/<id>/images/` per photo.
+- Photos upload one at a time.
+- Remember: *the report first, the photos second.*
+
+### 4. Partial failure
+- If the report is saved but a photo fails, say "report received, 1 photo not uploaded" and offer Retry.
+- Never throw the saved report away.
+- Remember: *the important part succeeded, so keep it and retry the rest.*
+
+### 5. Client-side validation is only UX
+- The browser checks title, length, and coordinate ranges for instant feedback.
+- The server validates everything again, because anyone can bypass the browser.
+- Remember: *the browser is polite, the server is the guard.*
+
+### 6. Object URLs
+- `URL.createObjectURL(file)` makes a temporary preview address. `URL.revokeObjectURL` frees the memory.
+- I revoke them in an effect cleanup.
+- Remember: *every object URL needs a revoke.*
+
+### 7. Custom hook: useFetch
+- A reusable function that wraps state and effects, and exposes `data`, `error`, `status`, `loading`, `reload`.
+- Each answer is stored with the key of the request that made it, so a stale answer is ignored.
+- Remember: *a hook packages logic I would otherwise copy.*
+
+### 8. Pagination in the UI
+- DRF returns `count`, `next`, `previous`, `results` (20 per page). The page lives in state and goes into the request as `?page=2`.
+- A new filter resets the page to 1.
+- Remember: *change the filter, go back to page 1.*
+
+### 9. 404 means "not found or no access"
+- Opening someone else's report returns 404 from `get_queryset`. The page says so without confirming it exists.
+- Remember: *the UI shows what the backend decides.*
+
+### 10. Controlled form with one state object
+- One `form` object and one `update` handler that uses `name`.
+- Remember: *one state, one handler, many fields.*
+
+### 11. The AI result screen
+- After submit, the citizen sees the urgency, category, department, and the AI's reason, or "a responder will review it".
+- Remember: *show the AI's work to the user too.*
+
+### 12. Accessibility basics
+- Every input has a label, every image has alt text, and icon buttons have `aria-label`.
+- Remember: *build it so everyone can use it.*
+
+### 13. A safety notice
+- The report page tells people to call the emergency number first. The app helps responders prioritise, and doesn't replace the call.
+- Remember: *software supports an emergency, it doesn't replace one.*
+
+### 14. Privacy detail
+- Photos can carry GPS data and are public by link. Citizens can also see the history notes of their own report.
+- Remember: *every feature has a privacy question.*
+
+## One-line summary of Day 10
+A citizen can report an emergency with their location and photos, see how the AI judged it, and follow every report in a paged list and a detail page with photos and history.
+
+## Interview answers to practise
+1. **How do you upload a file with a form?** Build a `FormData`, append the file under the field name the server expects, and POST it. The browser sets the multipart boundary, so I don't set Content-Type.
+2. **What if the report saves but a photo fails?** I keep the report, tell the user which photos failed, and offer to retry only those.
+3. **How does geolocation work, and what can go wrong?** The browser asks for permission, then returns coordinates. It can be denied, unavailable, or time out, and it needs HTTPS or localhost, so I offer manual entry.
+4. **What is a custom hook?** A function starting with `use` that packages state and effects. My `useFetch` loads data and ignores stale answers.
+5. **Why validate in both browser and server?** The browser gives instant feedback, but only the server can be trusted.
+6. **How do you avoid memory leaks with image previews?** `URL.createObjectURL` allocates memory, so I call `revokeObjectURL` in an effect cleanup.

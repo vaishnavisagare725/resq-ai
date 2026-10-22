@@ -70,3 +70,66 @@ button:disabled { opacity: 0.6; cursor: default; }
 .badge.high { background: #e8590c; }
 .badge.medium { background: #f59f00; }
 .badge.low { background: #2f9e44; }
+
+
+/* ---- Day 10 additions ---- */
+textarea, select {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fff;
+}
+textarea { min-height: 110px; resize: vertical; }
+
+.form.wide { max-width: 560px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.5rem; }
+.label { font-size: 0.9rem; color: var(--muted); display: block; margin-bottom: 0.25rem; }
+
+button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.button {
+  display: inline-block;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  background: var(--brand);
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.tags { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.small { font-size: 0.85rem; }
+
+.notice {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  color: #5f4b00;
+  margin-bottom: 1rem;
+}
+
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.6rem; margin-top: 0.5rem; }
+.photos img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.thumb { position: relative; }
+.thumb button { position: absolute; top: 4px; right: 4px; padding: 0.15rem 0.45rem; background: rgba(0, 0, 0, 0.65); font-size: 0.8rem; }
+
+.list.links li { padding: 0; }
+.item { display: flex; justify-content: space-between; gap: 1rem; width: 100%; padding: 0.7rem 0; color: inherit; text-decoration: none; }
+.item:hover strong { text-decoration: underline; }
+
+.pager { display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; gap: 0.5rem; }
+
+.timeline { list-style: none; margin: 0; padding: 0 0 0 1rem; border-left: 2px solid var(--line); }
+.timeline li { padding: 0 0 1rem 0.75rem; }
+
+.chip.status-open { background: #fff3cd; }
+.chip.status-assigned { background: #dbeafe; }
+.chip.status-resolved { background: #d1fadf; }
+
+@media (max-width: 560px) {
+  .two { grid-template-columns: 1fr; }
+  .navbar { flex-wrap: wrap; }
+}

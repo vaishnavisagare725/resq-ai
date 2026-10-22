@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import api, { errorMessages } from '../api'
 import { useAuth } from '../auth/useAuth'
 
@@ -48,7 +49,7 @@ export default function Home() {
         <ul className="list">
           {data?.results.slice(0, 5).map((i) => (
             <li key={i.id}>
-              <span>{i.title}</span>
+              <Link to={`/incidents/${i.id}`}>{i.title}</Link>
               <span>
                 <span className={`badge ${i.urgency}`}>{i.urgency}</span>{' '}
                 <span className="chip">{i.status}</span>
