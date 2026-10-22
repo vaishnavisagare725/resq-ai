@@ -813,3 +813,6 @@ A React app now registers and logs users in, sends the JWT on every call, renews
 4. **Is a ProtectedRoute secure?** No. It only improves the experience. Anyone can change browser code, so the API enforces permissions.
 5. **Where do you store a JWT and what are the risks?** localStorage, which XSS could read. The alternatives are memory or an httpOnly cookie with CSRF protection. I limit the damage with a 30-minute access token.
 6. **What is CORS?** A browser rule that blocks a page from calling another origin unless that server allows it. Django allows the React origin.
+
+- "LF will be replaced by CRLF" is a Windows line-ending notice, not an error. Check git status for the real file list.
+- Vite's package.json and package-lock.json are committed. node_modules is not, because anyone recreates it with npm install.
