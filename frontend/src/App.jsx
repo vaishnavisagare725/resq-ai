@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router'
 import Navbar from './components/Navbar'
 import ProtectedRoute from './components/ProtectedRoute'
+import Dashboard from './pages/Dashboard'
 import Home from './pages/Home'
 import IncidentDetail from './pages/IncidentDetail'
 import Login from './pages/Login'
@@ -47,7 +48,7 @@ export default function App() {
             path="/dashboard"
             element={
               <ProtectedRoute roles={['responder', 'admin']}>
-                <Placeholder title="Responder dashboard" day="Day 11" />
+                <Dashboard />
               </ProtectedRoute>
             }
           />

@@ -133,3 +133,41 @@ button.secondary { background: transparent; color: var(--ink); border: 1px solid
   .two { grid-template-columns: 1fr; }
   .navbar { flex-wrap: wrap; }
 }
+
+
+
+/* ---- Day 11 additions ---- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.6rem; margin-top: 1rem; }
+button.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  text-align: left;
+}
+button.stat .num { font-size: 1.6rem; font-weight: 700; }
+button.stat .lbl { font-size: 0.8rem; color: var(--muted); }
+button.stat.critical .num { color: #b42318; }
+button.stat.active { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+
+.tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+button.tab { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+button.tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.filters { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; margin-top: 0.75rem; }
+.filters label { min-width: 140px; }
+.inline { flex-direction: row; align-items: center; gap: 0.4rem; }
+.inline input { width: auto; }
+
+.queue li { align-items: center; padding: 0.8rem 0; }
+.grow { flex: 1; min-width: 0; }
+
+.action { border-top: 1px solid var(--line); padding: 0.9rem 0; }
+.action:first-of-type { border-top: 0; }
+.action h4 { margin: 0 0 0.5rem; }
+.checks { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.5rem 0; }
+.person { display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; }

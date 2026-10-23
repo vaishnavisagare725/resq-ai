@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Case, IntegerField, Q, When
-from rest_framework import viewsets
+from django.db import transaction
+from django.db.models import Case, Count, IntegerField, Q, When
+from rest_framework import generics, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,6 +14,7 @@ from .permissions import (
     IsAssignedResponderOrAdmin,
     IsOnIncidentOrAdmin,
     IsResponder,
+    IsResponderOrAdmin,
 )
 from .serializers import (
     MAX_IMAGES_PER_INCIDENT,
@@ -22,6 +24,7 @@ from .serializers import (
     NoteSerializer,
     TriageSerializer,
     WorkerIdsSerializer,
+    WorkerSerializer,
 )
 
 User = get_user_model()
@@ -33,6 +36,22 @@ URGENCY_RANK = Case(
     default=3,
     output_field=IntegerField(),
 )
+
+
+class WorkerListView(generics.ListAPIView):
+    """GET /api/workers/ : workers a responder can assign (their own department)."""
+
+    serializer_class = WorkerSerializer
+    permission_classes = [IsResponderOrAdmin]
+    pagination_class = None   # a short plain list is enough for a picker
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = User.objects.filter(role='worker', is_active=True).order_by('username')
+        if user.role == 'responder':
+            return qs.filter(department=user.department)
+        department = self.request.query_params.get('department')
+        return qs.filter(department=department) if department else qs
 
 
 class IncidentViewSet(viewsets.ModelViewSet):
@@ -52,22 +71,23 @@ class IncidentViewSet(viewsets.ModelViewSet):
             return [CanTriage()]
         return [IsAuthenticated()]
 
-    def get_queryset(self):
+    def _visible(self, qs):
+        """The role rules: who may see which incidents."""
         user = self.request.user
-        qs = (
+        if user.role == 'citizen':
+            return qs.filter(reporter=user)
+        if user.role == 'worker':
+            return qs.filter(workers=user)
+        if user.role == 'responder':
+            return qs.filter(Q(department=user.department) | Q(department=''))
+        return qs   # admin: sees everything
+
+    def get_queryset(self):
+        qs = self._visible(
             Incident.objects
             .select_related('reporter', 'assigned_to')
             .prefetch_related('workers', 'images')
         )
-
-        # who may see which rows
-        if user.role == 'citizen':
-            qs = qs.filter(reporter=user)
-        elif user.role == 'worker':
-            qs = qs.filter(workers=user)
-        elif user.role == 'responder':
-            qs = qs.filter(Q(department=user.department) | Q(department=''))
-        # admin: sees everything
 
         # optional filters from the URL
         params = self.request.query_params
@@ -107,14 +127,30 @@ class IncidentViewSet(viewsets.ModelViewSet):
         )
         return self.get_serializer(fresh).data
 
+    # GET /api/incidents/summary/ : counts for the dashboard cards, with the same role rules
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        qs = self._visible(Incident.objects.all())
+        counts = qs.aggregate(
+            open=Count('id', filter=Q(status='open'), distinct=True),
+            assigned=Count('id', filter=Q(status='assigned'), distinct=True),
+            resolved=Count('id', filter=Q(status='resolved'), distinct=True),
+            critical_open=Count('id', filter=Q(status='open', urgency='critical'), distinct=True),
+            needs_review_open=Count('id', filter=Q(status='open', needs_review=True), distinct=True),
+        )
+        return Response(counts)
+
     # POST /api/incidents/<id>/take/
     @action(detail=True, methods=['post'])
     def take(self, request, pk=None):
         incident = self.get_object()
-        if incident.assigned_to_id:
-            return Response({'detail': 'This incident is already taken.'}, status=400)
-        incident.assign_responder(request.user, request.user)
-        return Response(self._fresh(incident))
+        with transaction.atomic():
+            # lock the row, so two responders cannot take the same incident at the same moment
+            locked = Incident.objects.select_for_update().get(pk=incident.pk)
+            if locked.assigned_to_id:
+                return Response({'detail': 'This incident is already taken.'}, status=400)
+            locked.assign_responder(request.user, request.user)
+        return Response(self._fresh(locked))
 
     # POST /api/incidents/<id>/add-workers/   {"worker_ids": [4, 5]}
     @action(detail=True, methods=['post'], url_path='add-workers')

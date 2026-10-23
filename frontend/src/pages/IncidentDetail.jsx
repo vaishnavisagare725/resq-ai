@@ -1,5 +1,7 @@
+import { useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { StatusBadge, UrgencyBadge } from '../components/Badges'
+import IncidentActions from '../components/IncidentActions'
 import useFetch from '../hooks/useFetch'
 import { formatDate, mapLink } from '../utils'
 
@@ -8,8 +10,14 @@ export default function IncidentDetail() {
   const navigate = useNavigate()
   const incident = useFetch(`/incidents/${id}/`)
   const history = useFetch(`/incidents/${id}/updates/`)
+  const { reload: reloadIncident } = incident
+  const { reload: reloadHistory } = history
 
-  if (incident.loading) return <p className="muted">Loading…</p>
+  // called by the Actions panel after every successful action
+  const refresh = useCallback(() => {
+    reloadIncident()
+    reloadHistory()
+  }, [reloadIncident, reloadHistory])
 
   // the backend hides incidents you may not see, so a 404 can mean "no access"
   if (incident.status === 404) {
@@ -22,13 +30,16 @@ export default function IncidentDetail() {
     )
   }
 
-  if (incident.error) {
-    return (
-      <div className="card">
-        <div className="error">{incident.error}</div>
-        <button type="button" className="secondary" onClick={incident.reload}>Try again</button>
-      </div>
-    )
+  if (!incident.data) {
+    if (incident.error) {
+      return (
+        <div className="card">
+          <div className="error">{incident.error}</div>
+          <button type="button" className="secondary" onClick={reloadIncident}>Try again</button>
+        </div>
+      )
+    }
+    return <p className="muted">Loading…</p>
   }
 
   const i = incident.data
@@ -38,6 +49,7 @@ export default function IncidentDetail() {
       <p>
         <button type="button" className="secondary" onClick={() => navigate(-1)}>← Back</button>
       </p>
+      {incident.error && <div className="error" style={{ marginBottom: '1rem' }}>{incident.error}</div>}
 
       <div className="card">
         <h2>{i.title}</h2>
@@ -50,6 +62,8 @@ export default function IncidentDetail() {
         <p>{i.description}</p>
         <p className="muted small">Reported by {i.reporter_name} on {formatDate(i.created_at)}</p>
       </div>
+
+      <IncidentActions incident={i} onChanged={refresh} />
 
       <div className="card">
         <h3>Location</h3>
@@ -90,8 +104,8 @@ export default function IncidentDetail() {
 
       <div className="card">
         <h3>History</h3>
-        {history.loading && <p className="muted">Loading…</p>}
-        {history.error && <div className="error">{history.error}</div>}
+        {history.error && !history.data && <div className="error">{history.error}</div>}
+        {!history.data && !history.error && <p className="muted">Loading…</p>}
         {history.data?.length === 0 && <p className="muted">No updates yet.</p>}
         <ul className="timeline">
           {history.data?.map((u) => (

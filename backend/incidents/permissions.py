@@ -66,3 +66,11 @@ class CanTriage(BasePermission):
     def has_object_permission(self, request, view, obj):
         u = request.user
         return u.role == 'admin' or obj.assigned_to_id in (None, u.id)
+
+
+class IsResponderOrAdmin(BasePermission):
+    """Responders and admins (used by the workers list)."""
+
+    def has_permission(self, request, view):
+        u = request.user
+        return u.is_authenticated and u.role in ('responder', 'admin')

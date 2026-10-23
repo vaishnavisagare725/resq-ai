@@ -900,3 +900,83 @@ A citizen can report an emergency with their location and photos, see how the AI
 4. **What is a custom hook?** A function starting with `use` that packages state and effects. My `useFetch` loads data and ignores stale answers.
 5. **Why validate in both browser and server?** The browser gives instant feedback, but only the server can be trusted.
 6. **How do you avoid memory leaks with image previews?** `URL.createObjectURL` allocates memory, so I call `revokeObjectURL` in an effect cleanup.
+
+
+
+
+
+
+
+
+---
+
+## Day 11: Responder Dashboard (Simple Words)
+
+### 1. Polling
+- The browser asks again every 15 seconds. Simple and works everywhere. WebSockets or SSE push instantly but are more work.
+- I skip polling when the tab is hidden (`document.hidden`).
+- Remember: *polling is asking again and again, and it is good enough for an MVP.*
+
+### 2. Stale-while-revalidate
+- While a list reloads, keep showing the old data, so the screen never blinks empty.
+- If a refresh fails, keep the last good data and show an error banner.
+- Remember: *show something old while fetching something new.*
+
+### 3. Race condition and row lock
+- Two responders click Take at the same moment. Without protection both succeed and one silently overwrites the other.
+- `select_for_update()` inside `transaction.atomic()` locks the row. The second request waits, sees "already taken", and gets a 400.
+- The server decides who won, never the screen.
+- Remember: *lock the row, then check, then write.*
+
+### 4. Conditional aggregation
+- `Count('id', filter=Q(status='open'))` counts several things in one query.
+- The summary endpoint gives all five card numbers with one database call.
+- Remember: *one query, many counts.*
+
+### 5. The summary endpoint uses the same role rules
+- `_visible()` is shared by the list and the summary, so a responder's cards match their list.
+- Remember: *one rule in one place.*
+
+### 6. Workers endpoint
+- A responder gets only their own department's workers. An admin can filter. Citizens and workers get 403.
+- `pagination_class = None`, because a picker needs a short plain list.
+- Remember: *the picker only offers who the rules allow.*
+
+### 7. UI permissions vs real permissions
+- The page hides buttons the user can't use. The API still refuses if someone sends the request anyway.
+- Remember: *the UI is convenience, the API is the guard.*
+
+### 8. Custom hooks I wrote
+- `useFetch` loads data, ignores stale answers, exposes `data`, `error`, `status`, `loading`, `updatedAt`, `reload`.
+- `useAction` wraps an action with `busy` and `error`, so buttons don't repeat try/catch.
+- Remember: *a hook packages logic I would otherwise copy.*
+
+### 9. Router state: a flash message
+- `navigate('/dashboard', { state: { flash: '...' } })` carries a one-time message to the next page.
+- Remember: *router state travels with the navigation.*
+
+### 10. Queue design
+- Tabs (Open, In progress, Resolved, All), sort by urgency, clickable cards, a "needs review" marker.
+- Every filter change goes back to page 1.
+- Remember: *critical first, and unclear cases flagged.*
+
+### 11. Re-routing after triage
+- If triage moves an unrouted incident to another department, the responder can no longer see it. The app sends them back to the dashboard with a notice.
+- Remember: *explain it when something disappears.*
+
+### 12. Limits to mention in an interview
+- Polling has up to 15 seconds of delay, and a real system would use WebSockets or SSE.
+- A worker is not checked for being busy elsewhere.
+- Cards count only what the role can see, by design.
+- Remember: *it works, and I know the next step.*
+
+## One-line summary of Day 11
+A responder sees a live, urgency-sorted queue, takes cases without double-assignment, corrects the AI, assigns workers from their own department, and resolves, with every step in the history.
+
+## Interview answers to practise
+1. **How do you stop two responders taking the same incident?** I lock the row with `select_for_update()` inside a transaction, re-check `assigned_to`, and only then assign. The second request gets a 400.
+2. **Why polling and not WebSockets?** Polling is simple and enough for an MVP. The cost is up to 15 seconds of delay. I'd move to WebSockets or server-sent events for instant updates.
+3. **How do the summary cards get five numbers with one query?** Conditional aggregation: `Count('id', filter=Q(...))` per card, in one `aggregate()` call.
+4. **What is stale-while-revalidate?** Keep showing the previous data while the new request is in flight, and keep it if the refresh fails.
+5. **Why hide the Take button and also check on the server?** Hiding it improves the experience. The server check is the real security.
+6. **Why does the cards' count match the list?** Both use the same `_visible()` role filter.
