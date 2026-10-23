@@ -4,6 +4,7 @@ import { StatusBadge, UrgencyBadge } from '../components/Badges'
 import IncidentActions from '../components/IncidentActions'
 import useFetch from '../hooks/useFetch'
 import { formatDate, mapLink } from '../utils'
+import IncidentMap from '../components/IncidentMap'
 
 export default function IncidentDetail() {
   const { id } = useParams()
@@ -67,7 +68,22 @@ export default function IncidentDetail() {
 
       <div className="card">
         <h3>Location</h3>
-        <p>
+        <IncidentMap
+          incidents={[
+            {
+              id: i.id,
+              title: i.title,
+              latitude: i.latitude,
+              longitude: i.longitude,
+              urgency: i.urgency,
+              status: i.status,
+            },
+          ]}
+          height={260}
+          linkToDetail={false}
+          showLegend={false}
+        />
+        <p className="small">
           {i.latitude}, {i.longitude}{' · '}
           <a href={mapLink(i.latitude, i.longitude)} target="_blank" rel="noreferrer">
             Open in OpenStreetMap

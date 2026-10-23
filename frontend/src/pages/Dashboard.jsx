@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router'
 import api, { errorMessages } from '../api'
 import { useAuth } from '../auth/useAuth'
 import { StatusBadge, UrgencyBadge } from '../components/Badges'
+import LiveMap from '../components/LiveMap'
 import Pager from '../components/Pager'
 import SummaryCards from '../components/SummaryCards'
 import useFetch from '../hooks/useFetch'
@@ -21,6 +22,7 @@ export default function Dashboard() {
   const { user } = useAuth()
   const location = useLocation()
   const flash = location.state?.flash
+  const [view, setView] = useState('list') // 'list' or 'map'
   const [filters, setFilters] = useState({ status: 'open', urgency: '', review: false, q: '', page: 1 })
   const [search, setSearch] = useState('')
   const [takingId, setTakingId] = useState(null)
@@ -50,6 +52,7 @@ export default function Dashboard() {
 
   // any filter change goes back to page 1, unless the change itself sets the page
   function setFilter(change) {
+    setView('list') // picking a card or a filter shows the list again
     setFilters((f) => ({ ...f, page: 1, ...change }))
   }
 
@@ -89,6 +92,10 @@ export default function Dashboard() {
                 Updated {new Date(list.updatedAt).toLocaleTimeString()}
               </span>
             )}
+            <div className="tabs">
+              <button type="button" aria-pressed={view === 'list'} className={`tab ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>List</button>
+              <button type="button" aria-pressed={view === 'map'} className={`tab ${view === 'map' ? 'active' : ''}`} onClick={() => setView('map')}>Map</button>
+            </div>
             <button type="button" className="secondary" onClick={refreshAll}>Refresh</button>
           </div>
         </div>
@@ -96,124 +103,133 @@ export default function Dashboard() {
         <SummaryCards data={summary.data} filters={filters} onPick={setFilter} />
       </div>
 
-      <div className="card">
-        <div className="tabs">
-          {TABS.map(([value, label]) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={filters.status === value}
-              className={`tab ${filters.status === value ? 'active' : ''}`}
-              onClick={() => setFilter({ status: value })}
-            >
-              {label}
-            </button>
-          ))}
+      {view === 'map' ? (
+        <div className="card">
+          <p className="muted small">All active incidents you can see, most urgent on top. Tap a circle for details.</p>
+          <LiveMap />
         </div>
+      ) : (
+        <>
+          <div className="card">
+            <div className="tabs">
+              {TABS.map(([value, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={filters.status === value}
+                  className={`tab ${filters.status === value ? 'active' : ''}`}
+                  onClick={() => setFilter({ status: value })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
-        <div className="filters">
-          <label>
-            Urgency
-            <select value={filters.urgency} onChange={(e) => setFilter({ urgency: e.target.value })}>
-              <option value="">Any</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </label>
-          <label className="inline">
-            <input
-              type="checkbox"
-              checked={filters.review}
-              onChange={(e) => setFilter({ review: e.target.checked })}
-            />
-            Needs review only
-          </label>
-          <form
-            className="actions"
-            onSubmit={(e) => {
-              e.preventDefault()
-              setFilter({ q: search.trim() })
-            }}
-          >
-            <label>
-              Search
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="title or description"
-              />
-            </label>
-            <button>Search</button>
-            {filters.q && (
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setSearch('')
-                  setFilter({ q: '' })
+            <div className="filters">
+              <label>
+                Urgency
+                <select value={filters.urgency} onChange={(e) => setFilter({ urgency: e.target.value })}>
+                  <option value="">Any</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+              <label className="inline">
+                <input
+                  type="checkbox"
+                  checked={filters.review}
+                  onChange={(e) => setFilter({ review: e.target.checked })}
+                />
+                Needs review only
+              </label>
+              <form
+                className="actions"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  setFilter({ q: search.trim() })
                 }}
               >
-                Clear
-              </button>
-            )}
-          </form>
-        </div>
-      </div>
-
-      <div className="card">
-        {actionError && <div className="error" style={{ marginBottom: '0.75rem' }}>{actionError}</div>}
-        {list.error && (
-          <div className="error" style={{ marginBottom: '0.75rem' }}>
-            {list.error}{' '}
-            <button type="button" className="secondary" onClick={refreshAll}>Try again</button>
+                <label>
+                  Search
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="title or description"
+                  />
+                </label>
+                <button>Search</button>
+                {filters.q && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setSearch('')
+                      setFilter({ q: '' })
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </form>
+            </div>
           </div>
-        )}
-        {!list.data && !list.error && <p className="muted">Loading…</p>}
-        {list.data && list.data.results.length === 0 && (
-          <p className="muted">No incidents match these filters.</p>
-        )}
 
-        {list.data && list.data.results.length > 0 && (
-          <>
-            <ul className="list queue">
-              {list.data.results.map((i) => (
-                <li key={i.id}>
-                  <div className="grow">
-                    <Link to={`/incidents/${i.id}`}><strong>{i.title}</strong></Link>
-                    <div className="muted small">
-                      #{i.id} · {i.reporter_name} · {timeAgo(i.created_at)}
-                      {i.assigned_to_name && ` · taken by ${i.assigned_to_name}`}
-                      {i.workers.length > 0 && ` · ${i.workers.length} worker(s)`}
-                    </div>
-                    <div className="tags">
-                      <UrgencyBadge value={i.urgency} />
-                      <StatusBadge value={i.status} />
-                      <span className="chip">{i.category}</span>
-                      {i.department && <span className="chip">{i.department}</span>}
-                      {i.needs_review && <span className="chip">needs review</span>}
-                    </div>
-                  </div>
-                  {canTake(i) && (
-                    <button type="button" disabled={takingId === i.id} onClick={() => take(i.id)}>
-                      {takingId === i.id ? 'Taking…' : 'Take'}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <Pager
-              page={filters.page}
-              count={list.data.count}
-              pageSize={PAGE_SIZE}
-              hasPrev={Boolean(list.data.previous)}
-              hasNext={Boolean(list.data.next)}
-              onPage={(p) => setFilter({ page: p })}
-            />
-          </>
-        )}
-      </div>
+          <div className="card">
+            {actionError && <div className="error" style={{ marginBottom: '0.75rem' }}>{actionError}</div>}
+            {list.error && (
+              <div className="error" style={{ marginBottom: '0.75rem' }}>
+                {list.error}{' '}
+                <button type="button" className="secondary" onClick={refreshAll}>Try again</button>
+              </div>
+            )}
+            {!list.data && !list.error && <p className="muted">Loading…</p>}
+            {list.data && list.data.results.length === 0 && (
+              <p className="muted">No incidents match these filters.</p>
+            )}
+
+            {list.data && list.data.results.length > 0 && (
+              <>
+                <ul className="list queue">
+                  {list.data.results.map((i) => (
+                    <li key={i.id}>
+                      <div className="grow">
+                        <Link to={`/incidents/${i.id}`}><strong>{i.title}</strong></Link>
+                        <div className="muted small">
+                          #{i.id} · {i.reporter_name} · {timeAgo(i.created_at)}
+                          {i.assigned_to_name && ` · taken by ${i.assigned_to_name}`}
+                          {i.workers.length > 0 && ` · ${i.workers.length} worker(s)`}
+                        </div>
+                        <div className="tags">
+                          <UrgencyBadge value={i.urgency} />
+                          <StatusBadge value={i.status} />
+                          <span className="chip">{i.category}</span>
+                          {i.department && <span className="chip">{i.department}</span>}
+                          {i.needs_review && <span className="chip">needs review</span>}
+                        </div>
+                      </div>
+                      {canTake(i) && (
+                        <button type="button" disabled={takingId === i.id} onClick={() => take(i.id)}>
+                          {takingId === i.id ? 'Taking…' : 'Take'}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <Pager
+                  page={filters.page}
+                  count={list.data.count}
+                  pageSize={PAGE_SIZE}
+                  hasPrev={Boolean(list.data.previous)}
+                  hasNext={Boolean(list.data.next)}
+                  onPage={(p) => setFilter({ page: p })}
+                />
+              </>
+            )}
+          </div>
+        </>
+      )}
     </>
   )
 }

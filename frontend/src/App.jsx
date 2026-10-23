@@ -6,7 +6,7 @@ import Home from './pages/Home'
 import IncidentDetail from './pages/IncidentDetail'
 import Login from './pages/Login'
 import MyReports from './pages/MyReports'
-import Placeholder from './pages/Placeholder'
+import MyTasks from './pages/MyTasks'
 import Register from './pages/Register'
 import ReportIncident from './pages/ReportIncident'
 
@@ -56,7 +56,7 @@ export default function App() {
             path="/my-tasks"
             element={
               <ProtectedRoute roles={['worker']}>
-                <Placeholder title="My tasks" day="Day 12" />
+                <MyTasks />
               </ProtectedRoute>
             }
           />

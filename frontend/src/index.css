@@ -171,3 +171,10 @@ button.tab.active { background: var(--ink); color: #fff; border-color: var(--ink
 .action h4 { margin: 0 0 0.5rem; }
 .checks { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.5rem 0; }
 .person { display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; }
+
+
+/* ---- Day 12 additions ---- */
+.leaflet-container { border-radius: 10px; z-index: 0; }
+
+.legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+.dot { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: middle; }

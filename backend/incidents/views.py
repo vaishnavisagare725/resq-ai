@@ -36,6 +36,7 @@ URGENCY_RANK = Case(
     default=3,
     output_field=IntegerField(),
 )
+MAP_LIMIT = 500   # the map shows at most this many incidents
 
 
 class WorkerListView(generics.ListAPIView):
@@ -97,6 +98,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(**{field: value})
         if params.get('needs_review') == 'true':
             qs = qs.filter(needs_review=True)
+        if params.get('active') == 'true':
+            qs = qs.exclude(status='resolved')
         text = params.get('q')
         if text:
             qs = qs.filter(Q(title__icontains=text) | Q(description__icontains=text))
@@ -139,6 +142,22 @@ class IncidentViewSet(viewsets.ModelViewSet):
             needs_review_open=Count('id', filter=Q(status='open', needs_review=True), distinct=True),
         )
         return Response(counts)
+
+    # GET /api/incidents/map/ : a slim list of ALL active incidents, for the map
+    @action(detail=False, methods=['get'], url_path='map')
+    def map_points(self, request):
+        qs = (
+            self._visible(Incident.objects.exclude(status='resolved'))
+            .annotate(rank=URGENCY_RANK)
+            .order_by('rank', '-created_at')
+        )
+        rows = list(
+            qs.values(
+                'id', 'title', 'latitude', 'longitude',
+                'urgency', 'status', 'category', 'needs_review',
+            )[: MAP_LIMIT + 1]
+        )
+        return Response({'results': rows[:MAP_LIMIT], 'truncated': len(rows) > MAP_LIMIT})
 
     # POST /api/incidents/<id>/take/
     @action(detail=True, methods=['post'])

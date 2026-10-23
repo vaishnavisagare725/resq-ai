@@ -980,3 +980,78 @@ A responder sees a live, urgency-sorted queue, takes cases without double-assign
 4. **What is stale-while-revalidate?** Keep showing the previous data while the new request is in flight, and keep it if the refresh fails.
 5. **Why hide the Take button and also check on the server?** Hiding it improves the experience. The server check is the real security.
 6. **Why does the cards' count match the list?** Both use the same `_visible()` role filter.
+
+
+
+
+
+
+---
+
+## Day 12: Worker Tasks and Maps (Simple Words)
+
+### 1. Leaflet, tiles, OpenStreetMap
+- Leaflet draws maps from tiles: small pictures that a tile server sends for the area and zoom.
+- OSM tiles are free for light use and need attribution ("© OpenStreetMap contributors"). A production app with many users should use a tile provider.
+- Remember: *a map is a grid of small pictures.*
+
+### 2. react-leaflet needs two things
+- Leaflet's CSS (`leaflet/dist/leaflet.css`) and a container with a height.
+- Without them the map is a gray strip or scrambled.
+- react-leaflet 5 needs React 19.
+- Remember: *CSS and height, or no map.*
+
+### 3. CircleMarker, not Marker
+- The default pin image breaks with bundlers like Vite. A CircleMarker is drawn by the browser, needs no image, and I color it by urgency.
+- Remember: *draw the dot, don't load an icon.*
+
+### 4. [lat, lng] order
+- Leaflet uses `[latitude, longitude]`. GeoJSON uses `[longitude, latitude]`.
+- Remember: *mix them up and the pin lands in the ocean.*
+
+### 5. Fit the view only when the incidents change
+- `FitToPoints` runs when the set of ids changes, not on every 15-second refresh.
+- Remember: *don't undo what the user is looking at.*
+
+### 6. A slim endpoint for the map
+- `/incidents/map/` returns only `id, title, lat, lng, urgency, status, category, needs_review`, using `.values(...)`.
+- It returns ALL active incidents (capped at 500, with a `truncated` flag), not pages of 20.
+- Remember: *send the map only what the map needs.*
+
+### 7. One role rule everywhere
+- The list, the summary, and the map all use `_visible()`.
+- A test checks that `len(map) == open + assigned` for every role.
+- Remember: *one rule in one place, plus a test that proves it.*
+
+### 8. The active filter
+- `?active=true` means "not resolved". Workers use it, because an incident can have workers while still `open`.
+- Remember: *active = everything except resolved.*
+
+### 9. Haversine distance
+- The formula for straight-line distance over the Earth between two coordinates.
+- It's not road distance, so the screen says "straight line".
+- Remember: *as the crow flies, not as the car drives.*
+
+### 10. Ask for location only on click
+- A permission popup on page load is rude and gets denied. The button asks only when needed.
+- Remember: *ask permission at the moment it makes sense.*
+
+### 11. Privacy of maps
+- A map shows exact positions of people in trouble. Only roles the backend allows can load that data.
+- Remember: *every pin is a person.*
+
+### 12. Scale limits to mention in an interview
+- About 500 circles is fine. Thousands need clustering (a plugin that groups nearby pins).
+- The public OSM tile server is for light use only.
+- Remember: *it works now, and I know what breaks at scale.*
+
+## One-line summary of Day 12
+Workers have a task page with distances and a map of their own tasks, responders have a live map of all active incidents, and every incident page shows where it is.
+
+## Interview answers to practise
+1. **Why a separate map endpoint?** The list is paged and carries long fields. The map needs a few fields for all active incidents, so a slim `.values()` query with a cap keeps it fast.
+2. **Why CircleMarker?** The default marker image breaks under Vite. A circle needs no image and can be colored by urgency.
+3. **How do you stop the map re-zooming on every refresh?** I fit the bounds only when the set of incident ids changes.
+4. **What is the Haversine formula?** It computes the great-circle distance between two latitude and longitude points. It's straight-line, not road distance.
+5. **How would the map scale to thousands of incidents?** Cluster the pins, load only the visible area (bounds query), and use a proper tile provider.
+6. **What are the privacy concerns?** Maps expose exact locations, so the backend restricts them by role, and the map uses the same visibility rule as the list.
