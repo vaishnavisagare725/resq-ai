@@ -1,3 +1,20 @@
+Core version (12 more days)
+Day	Work
+4	IncidentUpdate history model, validators, a model index, admin polish (kept lean)
+5	Django REST Framework: serializers and the incident API
+6	Register, login, and JWT
+7	Roles and permissions, filtering, pagination, CORS
+8	AI service (keyword-based first) wired into the API
+9	React setup, routes, Axios
+10	Auth in React: Context, protected routes
+11	Report form with geolocation, My Reports page
+12	Responder dashboard and map
+13	Tests and logging
+14	Deployment
+15	README, screenshots, architecture diagram, interview practice
+
+That’s a real full-stack project: authentication, role-based access, a REST API, an AI feature, a React UI, tests, and a live link.
+
 # ResQ AI: Day 1 Notes (Simple Words)
 
 ## The big picture
@@ -1055,3 +1072,141 @@ Workers have a task page with distances and a map of their own tasks, responders
 4. **What is the Haversine formula?** It computes the great-circle distance between two latitude and longitude points. It's straight-line, not road distance.
 5. **How would the map scale to thousands of incidents?** Cluster the pins, load only the visible area (bounds query), and use a proper tile provider.
 6. **What are the privacy concerns?** Maps expose exact locations, so the backend restricts them by role, and the map uses the same visibility rule as the list.
+
+
+---
+
+## Day 13: Tests, Logging, Hardening (Simple Words)
+
+### 1. Why automated tests
+- Hand-testing is slow and forgetful. A test suite runs in seconds, every time, and tells me when a change breaks something old.
+- Mine: 109 backend tests in 3 seconds and 23 frontend tests.
+- Remember: *a test suite is a safety net that never gets tired.*
+
+### 2. The test database
+- Django creates `test_resq_ai`, runs the tests, and drops it. My real data is never touched.
+- Each TestCase test runs inside a transaction that is rolled back, so tests don't affect each other.
+- `--keepdb` reuses the test database and skips rebuilding it.
+- Remember: *every test starts from a clean slate.*
+
+### 3. Test levels
+- **Unit:** `predict()` on 16 sample reports, model methods.
+- **API:** log in as a role, call an endpoint, check the status code and the JSON.
+- **UI component:** the PhotoPicker rejects a text file.
+- **End to end:** a real browser clicking through (not done yet).
+- Remember: *many small fast tests, few big slow ones.*
+
+### 4. Negative tests are my security tests
+- A citizen cannot take a case. A fire responder gets 404 on a medical incident. A fake `urgency` is ignored. A stranger cannot read a history.
+- Remember: *a permission I have not tested is a permission I only hope works.*
+
+### 5. force_authenticate vs a real login
+- `client.force_authenticate(user)` skips the password and token, so the role tests stay short.
+- The auth tests use the real `/auth/login/` endpoint.
+- Remember: *test the role, not the login, in the role tests.*
+
+### 6. Races need a really concurrent test
+- `TestCase` hides row locks inside one transaction. `TransactionTestCase` with two threads and a barrier starts two requests together.
+- The result must be exactly one 200 and one 400, and the log shows the loser waiting for the row lock.
+- Remember: *concurrency needs a test that is really concurrent.*
+
+### 7. Mocking
+- Replace one real piece with a controlled one. I patch the throttle rate to 3/min so I can test it in 4 requests. In React, `vi.mock` replaces `useAuth`.
+- Remember: *change one thing, keep the rest real.*
+
+### 8. Tests must not need a server or the internet
+- `manage.py test` imports every file named `test*.py`. My old smoke scripts logged in to a running server at import, and crashed with "connection refused".
+- Fix: a `scripts/` folder (no `__init__.py`) with files named `smoke_*.py`.
+- Remember: *a test that needs a running server is a script, not a test.*
+
+### 9. A separate settings module for tests
+- `config/test_settings.py` uses the fast MD5 password hasher and silent logs. The run went from 156 seconds to 4.
+- MD5 only in tests, never in production.
+- Run: `python manage.py test --settings=config.test_settings --keepdb`.
+- Remember: *make the slow safe thing fast in tests only.*
+
+### 10. Coverage
+- The share of lines my tests ran. `coverage report -m` shows the missing line numbers.
+- 90% showed real gaps (admin forms, the backfill command). 99% left three deliberate lines.
+- It shows what is untested, not what is correct. 100% is not the goal.
+- Remember: *coverage finds the gaps, not the bugs.*
+
+### 11. What coverage taught me about my own tests
+- The history endpoint (`/updates/`) had no API test, even though it had a visibility rule.
+- My admin test "a worker cannot be the responder" passed for the wrong reason: `limit_choices_to` rejects a worker at the field level before my `clean()` runs. That is defence in depth: two layers, and coverage showed which one did the work.
+- A fail-fast `raise` (missing SECRET_KEY) and an unreachable defensive `return False` are fine to leave uncovered.
+- Remember: *a passing test can pass for the wrong reason.*
+
+### 12. Vitest and Testing Library
+- Vitest runs the tests. jsdom is a fake browser. Testing Library finds things by label, role, and text, like a user. user-event types, clicks, and uploads files.
+- `vi.fn()` records calls. `vi.mock()` replaces a module. Fake timers freeze the clock.
+- jsdom lacks `URL.createObjectURL`, so the setup file stubs it.
+- Remember: *test what the user sees, not the internals.*
+
+### 13. Rate limiting (throttling)
+- `ScopedRateThrottle` with `throttle_scope = 'login'` allows N requests per period per IP. Over the limit gives 429 and a "try again in N seconds" message.
+- Behind a proxy all users share the proxy's IP, so deployment needs the proxy settings.
+- Remember: *a login without a limit is an invitation to guess passwords.*
+
+### 14. Logging
+- Levels: DEBUG, INFO, WARNING, ERROR. A rotating file stops the log growing forever.
+- Log events (who did what to which id). Never log passwords, tokens, report text, or coordinates.
+- I log every human triage correction: that is the data for measuring the AI later.
+- Remember: *log events, not secrets.*
+
+### 15. Config from the environment
+- DEBUG, ALLOWED_HOSTS, CORS origins, and the database host and port come from environment variables. The app refuses to start without SECRET_KEY.
+- `.env.example` lists the names without values and is committed. `.env` is not.
+- Remember: *same code everywhere, different settings.*
+
+### 16. check --deploy
+- Django audits my settings for production risks (HTTPS, secure cookies, HSTS). Today I only count the warnings. Day 14 fixes them.
+- Remember: *run the audit before the launch, not after.*
+
+### 17. The quality gate
+- Backend: `check`, `test`. Frontend: `lint`, `test`, `build`. All green before I push.
+- Remember: *green before push.*
+
+### 18. Debugging habits from today
+- "not recognized as the name of a cmdlet" means the program isn't installed or the venv isn't active. Check for `(venv)`. `python -m coverage` always works.
+- Read the LAST lines of a long error first.
+- `New-Item a, b -ItemType File`: commas between names, none before the option.
+- Remember: *check the environment before the code.*
+
+## One-line summary of Day 13
+One command proves every role, rule, race, and upload still works, the app logs what matters, guessing passwords is rate-limited, the config comes from the environment, and the quality gate is green.
+
+## Interview answers to practise
+1. **How do you test permissions?** API tests per role using `force_authenticate`, including negative cases: what each role must not be able to do.
+2. **How do you test a race condition?** A `TransactionTestCase` with two threads and a barrier so both requests start together. I assert exactly one 200 and one 400, and check that only one history row exists.
+3. **What does 99% coverage mean?** That my tests ran 99% of the lines, not that the behaviour is right. I used the report to find real gaps, like an untested endpoint, and left deliberate fail-fast lines uncovered.
+4. **How did you speed up your tests?** I used a test settings module with a fast password hasher and silent logging, plus `--keepdb`. The run dropped from 156 seconds to about 3.
+5. **Why must tests not depend on a running server?** They would fail in any environment without one, so they would be flaky and useless in automation. Those belong in smoke scripts.
+6. **How do you stop password guessing?** Throttle the login endpoint per IP with DRF's `ScopedRateThrottle`, and return 429.
+7. **What do you log, and what do you never log?** Events: who did what to which id. Never passwords, tokens, or personal data like report text and coordinates.
+8. **How do you test a React component?** Render it with Testing Library, find elements the way a user would (label, role, text), act with user-event, and assert on what appears. I mock the auth hook to control who is logged in.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

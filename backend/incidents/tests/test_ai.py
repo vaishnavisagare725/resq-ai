@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 
-from .ai_service import predict
+from incidents.ai_service import predict
 
 # title, description, expected urgency, expected category, expected needs_review
 CASES = [

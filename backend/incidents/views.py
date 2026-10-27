@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
@@ -27,6 +29,7 @@ from .serializers import (
     WorkerSerializer,
 )
 
+logger = logging.getLogger(__name__)   # the name is "incidents.views"
 User = get_user_model()
 
 URGENCY_RANK = Case(
@@ -111,13 +114,18 @@ class IncidentViewSet(viewsets.ModelViewSet):
         """The AI decides urgency, category and department. The client cannot."""
         data = serializer.validated_data
         result = predict(data['title'], data['description'])
-        serializer.save(
+        incident = serializer.save(
             reporter=self.request.user,
             urgency=result['urgency'],
             category=result['category'],
             department=CATEGORY_TO_DEPARTMENT.get(result['category'], ''),
             ai_reason=result['reason'],
             needs_review=result['needs_review'],
+        )
+        logger.info(
+            'created incident=%s by=%s urgency=%s category=%s needs_review=%s',
+            incident.id, self.request.user.username,
+            incident.urgency, incident.category, incident.needs_review,
         )
 
     def _fresh(self, incident):
@@ -167,8 +175,11 @@ class IncidentViewSet(viewsets.ModelViewSet):
             # lock the row, so two responders cannot take the same incident at the same moment
             locked = Incident.objects.select_for_update().get(pk=incident.pk)
             if locked.assigned_to_id:
+                logger.info('take refused (already taken) incident=%s by=%s',
+                            locked.id, request.user.username)
                 return Response({'detail': 'This incident is already taken.'}, status=400)
             locked.assign_responder(request.user, request.user)
+        logger.info('taken incident=%s by=%s', locked.id, request.user.username)
         return Response(self._fresh(locked))
 
     # POST /api/incidents/<id>/add-workers/   {"worker_ids": [4, 5]}
@@ -207,6 +218,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.change_status(
             Incident.Status.RESOLVED, request.user, s.validated_data.get('note', '')
         )
+        logger.info('resolved incident=%s by=%s', incident.id, request.user.username)
         return Response(self._fresh(incident))
 
     # POST /api/incidents/<id>/triage/   {"urgency": "high", "category": "medical", "note": "..."}
@@ -215,7 +227,14 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident = self.get_object()
         s = TriageSerializer(data=request.data)
         s.is_valid(raise_exception=True)
+        before = (incident.urgency, incident.category)
         incident.triage(request.user, **s.validated_data)
+        # every human correction of the AI is logged: this is the data for measuring the AI later
+        logger.info(
+            'triage incident=%s by=%s urgency %s->%s category %s->%s',
+            incident.id, request.user.username,
+            before[0], incident.urgency, before[1], incident.category,
+        )
         return Response(self._fresh(incident))
 
     # GET /api/incidents/<id>/updates/
