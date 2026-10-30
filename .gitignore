@@ -9,3 +9,4 @@ media/
 logs/
 .coverage
 htmlcov/
+staticfiles/
