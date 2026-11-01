@@ -19,5 +19,5 @@ RUN SECRET_KEY=build-only-not-a-secret python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-# on every start: apply migrations, make sure the admin and demo data exist, then serve with gunicorn
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py ensure_admin && python manage.py seed_demo && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 60 --access-logfile -"]
+# on every start: check the settings, apply migrations, make sure the admin and demo data exist, then serve
+CMD ["sh", "-c", "python manage.py check_env && python manage.py migrate --noinput && python manage.py ensure_admin && python manage.py seed_demo && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-1} --timeout 60 --access-logfile -"]
