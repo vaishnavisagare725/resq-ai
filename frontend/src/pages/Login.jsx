@@ -46,6 +46,9 @@ export default function Login() {
         {error && <div className="error">{error}</div>}
         <button disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button>
       </form>
+      <p className="muted small">
+        This demo runs on a free server. After a quiet period, the first request can take up to a minute.
+      </p>
       <p className="muted">
         New here? <Link to="/register">Create a citizen account</Link>
       </p>

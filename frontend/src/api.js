@@ -73,5 +73,12 @@ export function errorMessages(err) {
   }
   return ['Something went wrong.']
 }
+// A free server sleeps when idle. Calling this when the site opens starts waking it up,
+// while the visitor is still looking at the login page.
+export function wakeServer() {
+  const root = API_URL.replace(/\/api\/?$/, '')
+  fetch(`${root}/health/`, { mode: 'no-cors' }).catch(() => {})
+}
 
 export default api
+
