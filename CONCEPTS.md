@@ -1190,6 +1190,102 @@ One command proves every role, rule, race, and upload still works, the app logs 
 
 
 
+---
+
+## Day 14: Deployment (Simple Words)
+
+### 1. Environments and config
+- The same code runs on my laptop and on a server. Only the settings differ, and they come from environment variables.
+- `.env.example` (committed) lists the names. The real values live in `.env` locally and in the host's dashboard in production.
+- Remember: *same code, different settings, secrets never in Git.*
+
+### 2. gunicorn, not runserver
+- `runserver` is a development toy. gunicorn runs several worker copies of my app and speaks WSGI, the standard way Python apps talk to servers.
+- Remember: *runserver for me, gunicorn for the world.*
+
+### 3. Docker
+- A Dockerfile is a recipe. An image is the sealed box it builds (Python, libraries, my code). A container is a running box.
+- It runs the same everywhere, which fixes "works on my machine". It also lets me install the system libraries that mysqlclient needs.
+- Layer cache: copy requirements.txt and install packages BEFORE copying the code, so Docker reuses that layer until the packages change.
+- Remember: *build once, run anywhere.*
+
+### 4. Reverse proxy and TLS termination
+- The host's edge handles HTTPS and forwards plain HTTP to my container with `X-Forwarded-Proto: https`.
+- `SECURE_PROXY_SSL_HEADER` tells Django to trust it. Without that, `SECURE_SSL_REDIRECT` redirects forever.
+- Remember: *the proxy ends TLS, Django must believe the header.*
+
+### 5. The HTTPS settings (my check --deploy list)
+- SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE, CSRF_COOKIE_SECURE, SECURE_HSTS_SECONDS (start at 1 hour, because HSTS can't be undone while the timer runs).
+- Two HSTS options belong to the domain owner. On a shared platform subdomain I silence them on purpose.
+- Result: `check --deploy` says no issues (2 silenced).
+- Remember: *turn the lock on only when HTTPS works.*
+
+### 6. WhiteNoise and collectstatic
+- Django serves its own CSS and JS for the admin and the browsable API through WhiteNoise. `collectstatic` gathers them at build time.
+- Remember: *collect at build, serve at run.*
+
+### 7. Ephemeral disks and object storage
+- A free server's disk can vanish on restart, so photos go to Cloudinary. The database keeps only the file name.
+- Django's Storage API is pluggable: my small CloudinaryStorage class uploads, builds URLs, and deletes, and nothing else in the app changed.
+- Remember: *servers are disposable, data is not.*
+
+### 8. A managed database
+- Aiven MySQL needs TLS and the provider's CA certificate (a public file I commit).
+- I tested the connection from my laptop first, because fixing it there takes seconds.
+- `CONN_HEALTH_CHECKS` tests a reused connection before use, because a cloud database drops idle ones.
+- Remember: *test the database from home before the server does.*
+
+### 9. Secrets
+- Passwords and keys live only in the host's dashboard. A secret in Git is a leaked secret, even if I delete it later.
+- The demo password is public on purpose and only protects fake data. The admin password is private.
+- Remember: *a committed secret is a leaked secret.*
+
+### 10. CORS vs CSRF trusted origins
+- CORS lets the React site call the API. CSRF_TRUSTED_ORIGINS lets the Django admin accept form posts over HTTPS. Two settings for two jobs.
+- Remember: *CORS for the website, CSRF origins for the admin.*
+
+### 11. Build-time vs runtime variables
+- Django reads its variables when it runs. Vite bakes `VITE_API_URL` into the files when it builds, so changing it means rebuilding.
+- Remember: *Vite variables are frozen at build.*
+
+### 12. SPA rewrite rule
+- Refreshing `/dashboard` asks the server for a file that doesn't exist. The rule `/*` to `/index.html` lets React Router take over.
+- Remember: *every path serves index.html.*
+
+### 13. Health endpoint and cold starts
+- `/health/` answers `ok`. The host checks it, and the site calls it on load to wake a sleeping free server.
+- A free instance sleeps after 15 idle minutes and takes about a minute to wake. That is a plan limit, and I say so on the login page.
+- Remember: *tell the user why it is slow.*
+
+### 14. Idempotent startup commands
+- On every start: migrate, ensure_admin, seed_demo. Each is safe to run twice.
+- Remember: *a start command must survive a restart.*
+
+### 15. Rate limiting behind a proxy
+- Counters live in each worker's memory, and all visitors can share the proxy's address. I raised the demo limits and noted `NUM_PROXIES`.
+- Remember: *a limit that locks out everyone is an outage.*
+
+### 16. The live smoke test
+- `scripts/smoke_live.py` wakes the server, runs the whole workflow with the demo roles, checks that photos are on Cloudinary, that http redirects to https, that HSTS is sent, that the admin CSS loads, and that CORS allows the site.
+- Remember: *prove it on the live site, not only on my laptop.*
+
+### 17. Limits to state honestly (interview)
+- Portfolio-grade: one instance, cold starts, free database that may power off, free photo quota, in-memory rate limits.
+- Next steps: a paid always-on instance, Redis for rate limits and caching, error tracking, backups, and a CI pipeline that runs the tests before each deploy.
+- Remember: *it is live, and I know exactly where it is weak.*
+
+## One-line summary of Day 14
+ResQ AI runs on the internet: a Dockerised Django API behind HTTPS, a managed MySQL database, photos on Cloudinary, a React site on a CDN, and a smoke test that proves the whole workflow on the live URL.
+
+## Interview answers to practise
+1. **How did you deploy it?** Django runs in a Docker container with gunicorn on Render, MySQL is a managed Aiven database reached over TLS, photos go to Cloudinary, and the React build is a static site on a CDN with a rewrite rule for client-side routing.
+2. **Why Docker?** It lets me install the system libraries mysqlclient needs and runs the same way everywhere.
+3. **Why not store photos on the server's disk?** Free instances have temporary disks, so files would vanish on restart. I wrote a small Django storage class that uploads to Cloudinary.
+4. **What does SECURE_PROXY_SSL_HEADER do?** The host's proxy ends HTTPS and forwards HTTP. The header tells Django the visitor used HTTPS. Without it the HTTPS redirect loops.
+5. **What is HSTS, and why start small?** It tells browsers to use only HTTPS for N seconds. It can't be undone during that time, so I start with an hour.
+6. **How do you keep secrets safe?** They live only in the host's dashboard and my local `.env`, which is git-ignored, and `.env.example` documents the names.
+7. **How do you verify a deployment?** A smoke script runs the full workflow on the live URL and checks HTTPS, headers, CORS, and photo storage.
+8. **What are the weaknesses of your deployment?** Cold starts, a single instance, a free database that can power off, and rate-limit counters held in memory per process. I'd fix them with a paid always-on instance and Redis.
 
 
 
